@@ -1,12 +1,75 @@
-body {
+@font-face {
+  font-family: 'Sora';
+  src: url('./assets/fonts/sora/Sora-Regular.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Sora';
+  src: url('./assets/fonts/sora/Sora-Bold.otf') format('opentype');
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Sora';
+  src: url('./assets/fonts/sora/Sora-Light.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Sora';
+  src: url('./assets/fonts/sora/Sora-Medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Apply Sora font to all text elements */
+body,
+h1, h2, h3, h4, h5, h6,
+p, span, div, button, input, textarea, 
+a, li, blockquote {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  font-family: 'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
+}
+
+/* Font weight adjustments */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: bold;
+}
+
+input, textarea, button {
+  font-weight: normal;
+}
+
+blockquote {
+  font-weight: 300;
+}
+
+strong, b {
+  font-weight: bold;
+}
+
+/* Ensure inherited font family */
+* {
+  font-family: inherit;
+}
+
+/* Add font smoothing */
+body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Keep monospace font for code blocks */
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
