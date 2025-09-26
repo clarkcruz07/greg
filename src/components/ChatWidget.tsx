@@ -111,8 +111,7 @@ const HeaderTitle = styled.h2`
 const HeaderSubtitle = styled.p`
   margin-bottom: 0.5rem;
   color: #444;
-  font-size: 0.9rem;
-  font-family: 'Sora-Light';
+  font-size: 0.8rem;
 
   @media (max-width: 768px) {
     font-size: 0.8rem;
@@ -121,8 +120,8 @@ const HeaderSubtitle = styled.p`
 
 const PromptLabel = styled.p`
   margin-top: 1rem;
-  font-size: 0.8rem;
-  font-family: 'Sora-Light';
+  font-size: 0.7rem;
+  
 `;
 
 const QuickPrompts = styled.div`
@@ -285,6 +284,31 @@ const RightIcons = styled.div`
   gap: 0.4rem;
 `;
 
+const TypingIndicator = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  color: #666;
+  font-style: italic;
+  font-size: 0.85rem;
+
+  &::after {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background-color: #666;
+    animation: blink 1.4s infinite;
+  }
+
+  @keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+`;
+
 interface QuickPrompt {
   text: string;
   action: () => void;
@@ -352,6 +376,11 @@ export const ChatWidget = observer(() => {
                   <ReactMarkdown>{message.text}</ReactMarkdown>
                 </Message>
               ))}
+              {chatStore.isTyping && (
+                <Message $isBot={true}>
+                  <TypingIndicator>Greg is typing</TypingIndicator>
+                </Message>
+              )}
             </MessagesContainer>
           )}
 
