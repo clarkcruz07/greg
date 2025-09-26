@@ -57,8 +57,8 @@ class ChatStore {
         conversationId: this.conversationId,
       });
       
-      const response = await fetch('http://localhost:8080/api/chat', {
-      //const response = await fetch('https://chatbot-vsqs.onrender.com/api/chat', {
+      //const response = await fetch('http://localhost:8080/api/chat', {
+      const response = await fetch('https://chatbot-vsqs.onrender.com/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
