@@ -58,7 +58,7 @@ class ChatStore {
       });
       
       //const response = await fetch('http://localhost:8080/api/chat', {
-      const response = await fetch('https://chatbot-vsqs.onrender.com/api/chat', {
+      const response = await fetch('https://porta-api-910117712971.us-west1.run.app/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
