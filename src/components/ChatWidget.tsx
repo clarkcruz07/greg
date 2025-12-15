@@ -1,8 +1,18 @@
 import React, { useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import styled from 'styled-components';
-import ReactMarkdown from 'react-markdown';
+import { marked } from "marked";
 import { chatStore } from '../store/ChatStore';
+
+marked.setOptions({ async: false });
+
+// Custom renderer for links to open in new tab
+const renderer = new marked.Renderer();
+const originalLink = renderer.link;
+renderer.link = ({ href, text }: any) => {
+  return `<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+};
+marked.setOptions({ renderer });
 
 const ChatContainer = styled.div`
   display: flex;
@@ -159,7 +169,7 @@ const Message = styled.div<MessageProps>`
   max-width: ${props => props.$isBot ? '100%' : '50%'};
   padding: 1rem 1.2rem;
   border-radius: 10px;
-  font-size: 0.9rem;
+  font-size: 12px;
   line-height: 1.6;
   align-self: ${props => props.$isBot ? 'flex-start' : 'flex-end'};
   color: ${props => props.$isBot ? '#333' : '#c22445'};
@@ -167,9 +177,10 @@ const Message = styled.div<MessageProps>`
   background-color: ${props => props.$isBot ? '#fff' : '#F9FAF2'};
   width: ${props => props.$isBot ? '' : '50%'};
   text-align: left;
+  position: relative;
 
   p {
-    margin: 0.8rem 0;
+    margin: 0.6rem 0;
     &:first-child {
       margin-top: 0;
     }
@@ -178,29 +189,69 @@ const Message = styled.div<MessageProps>`
     }
   }
 
-  h2 {
-    font-size: 1.1rem;
-    font-weight: 600;
-    margin: 1.5rem 0 1rem 0;
-    color: #222;
-    &:first-child {
-      margin-top: 0.8rem;
-    }
-  }
+  h1 {
+  font-size: 1em; /* ~14px */
+  font-weight: 400;
+  margin: 0.8em 0 0.4em;
+}
 
+h2 {
+  font-size: 1em;
+  font-weight: 400;
+  margin: 0.7em 0 0.4em;
+}
+
+h3 {
+  font-size: 1em;
+  font-weight: 400;
+  margin: 0.6em 0 0.3em;
+}
+
+h4, h5, h6 {
+  font-size: 1em;
+  font-weight: 400;
+  margin: 0.5em 0 0.3em;
+}
+ol li::before,
+ul li::before {
+  font-weight: 400;
+}
   ul, ol {
-    margin: 1rem 0;
-    padding-left: 1.4rem;
-  }
+  margin: 1.5rem 0 0.8rem 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+ol {
+  counter-reset: item;
+}
 
   li {
-    margin: 0.5rem 0;
-    line-height: 1.5;
+    margin: 0.8rem 0;
+    line-height: 1.6;
+    color: #444;
+    display: block;
+    padding-left: 1.8rem;
+    position: relative;
+  }
+
+  ol li::before {
+    content: counter(item) ". ";
+    counter-increment: item;
+    position: absolute;
+    left: 0;
+    
+  }
+
+  ul li::before {
+    content: "•";
+    position: absolute;
+    left: 0;
   }
 
   strong {
     color: #222;
-    font-weight: 600;
+    font-weight: 500;
   }
 
   blockquote {
@@ -227,8 +278,57 @@ const Message = styled.div<MessageProps>`
   `}
 `;
 
+const FeedbackContainer = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.8rem;
+`;
+
+const FeedbackButton = styled.button<{ isActive?: boolean }>`
+  background: none;
+  border: 1px solid #ddd;
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.2s ease;
+  color: #666;
+
+  &:hover {
+    background-color: #f5f5f5;
+    border-color: #c22445;
+  }
+
+  ${props => props.isActive && `
+    background-color: #c22445;
+    color: #fff;
+    border-color: #c22445;
+  `}
+`;
+
+const DisclaimerNotice = styled.div`
+  margin: 0 auto;
+  text-align: left;
+  font-size: 0.65rem;
+  color: #666;
+  line-height: 1.4;
+  border-radius: 20px;
+  p {
+    margin: 0;
+  }
+
+  a {
+    color: #c22445;
+    text-decoration: underline;
+  }
+`;
+
 const InputForm = styled.form`
   display: flex;
+  flex-direction: column;
   padding: 0.6rem;
   border-top: 1px solid #eee;
   background-color: #fff;
@@ -241,7 +341,7 @@ const ChatInputBar = styled.div`
   padding: 0.4rem 0.6rem;
   background: #fff;
   margin: 0.6rem;
-  width: 100%;
+  
 `;
 
 const Input = styled.input`
@@ -262,6 +362,24 @@ const ChatInputActions = styled.div`
   align-items: center;
   justify-content: flex-end;
   margin-top: 0.4rem;
+`;
+
+const Footer = styled.div`
+  padding: 0.6rem;
+  border-top: 1px solid #eee;
+  background-color: #f9f9f9;
+  font-size: 0.75rem;
+  color: #666;
+  line-height: 1.4;
+
+  p {
+    margin: 0.3rem 0;
+  }
+
+  a {
+    color: #c22445;
+    text-decoration: underline;
+  }
 `;
 
 const IconButton = styled.button`
@@ -317,20 +435,16 @@ interface QuickPrompt {
 export const ChatWidget = observer(() => {
   const [input, setInput] = useState('');
 
-  const quickPrompts: QuickPrompt[] = [
-    {
-      text: "What's best for subfloors on 600mm joists?",
-      action: () => chatStore.sendMessage("What's best for subfloors on 600mm joists?")
-    },
-    {
-      text: "Is Yellow Tongue OK for wet areas?",
-      action: () => chatStore.sendMessage("Is Yellow Tongue OK for wet areas?")
-    },
-    {
-      text: "How do I install STRUCTAflor?",
-      action: () => chatStore.sendMessage("How do I install STRUCTAflor?")
+  // Create dynamic quick prompts from config
+  const getQuickPrompts = (): QuickPrompt[] => {
+    if (!chatStore.config?.suggestedMessages) {
+      return [];
     }
-  ];
+    return chatStore.config.suggestedMessages.map((text) => ({
+      text,
+      action: () => chatStore.sendMessage(text)
+    }));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -339,6 +453,22 @@ export const ChatWidget = observer(() => {
       setInput('');
     }
   };
+
+const normalizeMarkdown = (text: string) => {
+  return text
+    // Headings must start on a new line
+    .replace(/(#+)([^\n])/g, '\n$1 $2')
+
+    // Numbered lists
+    .replace(/(\n|^)(\d+\.)\s+/g, '\n$2 ')
+
+    // Bullet lists
+    .replace(/(\n|^)-\s+/g, '\n- ')
+
+    // Preserve paragraphs WITHOUT breaking sentences
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
 
   return (
     <>
@@ -349,17 +479,17 @@ export const ChatWidget = observer(() => {
             <CloseButton onClick={chatStore.toggleChat}>×</CloseButton>
           </ChatHeader>
 
-          {chatStore.messages.length === 0 && (
+          {chatStore.messages.length === 0 && chatStore.configLoaded && (
             <MessagesContainer>
               <IntroSection>
-                <img className="greg-icon" src="/greg.png" alt="Greg" />
-                <HeaderTitle>Hi, I'm Greg — your product assistant at Porta.</HeaderTitle>
+                <img className="greg-icon" src="/greg.png" alt={chatStore.config?.displayName || "Greg"} />
+                <HeaderTitle>Hi, I'm {chatStore.config?.displayName || "Greg"} — your product assistant at Porta.</HeaderTitle>
                 <HeaderSubtitle>
                   Ask me anything about timber products, specs, installation, or finding the right solution for your build.
                 </HeaderSubtitle>
                 <PromptLabel>You Could Try These Quick Prompts</PromptLabel>
                 <QuickPrompts>
-                  {quickPrompts.map((prompt, index) => (
+                  {getQuickPrompts().map((prompt, index) => (
                     <PromptButton key={index} onClick={prompt.action}>
                       {prompt.text}
                     </PromptButton>
@@ -371,11 +501,39 @@ export const ChatWidget = observer(() => {
 
           {chatStore.messages.length > 0 && (
             <MessagesContainer>
-              {chatStore.messages.map((message, index) => (
-                <Message key={index} $isBot={message.isBot}>
-                  <ReactMarkdown>{message.text}</ReactMarkdown>
-                </Message>
-              ))}
+              {chatStore.messages.map((message, index) => {
+                const isLastBotMessage = message.isBot && index === chatStore.messages.length - 1;
+                const showFeedback = isLastBotMessage && message.text && !chatStore.isTyping && !message.isFeedbackResponse;
+                
+                return (
+                  <div key={index}>
+                    <Message $isBot={message.isBot}>
+                      <div
+                        dangerouslySetInnerHTML={{
+                          __html: marked.parse(normalizeMarkdown(message.text || "")) as string
+                          //__html: normalizeMarkdown(message.text || "") as string
+                        }}
+                      />
+                      {showFeedback && (
+                        <FeedbackContainer>
+                          <FeedbackButton 
+                            isActive={message.feedback === 'like'}
+                            onClick={() => chatStore.handleLike(message.id || '')}
+                          >
+                            👍 Like
+                          </FeedbackButton>
+                          <FeedbackButton 
+                            isActive={message.feedback === 'dislike'}
+                            onClick={() => chatStore.handleDislike(message.id || '')}
+                          >
+                            👎 Dislike
+                          </FeedbackButton>
+                        </FeedbackContainer>
+                      )}
+                    </Message>
+                  </div>
+                );
+              })}
               {chatStore.isTyping && (
                 <Message $isBot={true}>
                   <TypingIndicator>Greg is typing</TypingIndicator>
@@ -385,11 +543,18 @@ export const ChatWidget = observer(() => {
           )}
 
           <InputForm onSubmit={handleSubmit}>
+            {chatStore.config?.dismissableNotice && (
+              <DisclaimerNotice
+                dangerouslySetInnerHTML={{
+                  __html: chatStore.config.dismissableNotice
+                }}
+              />
+            )}
             <ChatInputBar>
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask me any question..."
+                placeholder={chatStore.config?.messagePlaceholder || "Ask me any question..."}
               />
               <ChatInputActions>
                 <RightIcons>
@@ -403,6 +568,14 @@ export const ChatWidget = observer(() => {
               </ChatInputActions>
             </ChatInputBar>
           </InputForm>
+
+          {chatStore.config?.footer && (
+            <Footer
+              dangerouslySetInnerHTML={{
+                __html: chatStore.config.footer
+              }}
+            />
+          )}
         </ChatContainer>
       ) : (
         <ChatButton onClick={chatStore.toggleChat}>

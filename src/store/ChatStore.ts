@@ -1,190 +1,433 @@
 import { makeAutoObservable } from 'mobx';
+import { v4 as uuidv4 } from "uuid";
 
 interface Message {
   text: string;
   isBot: boolean;
   id?: string;
+  feedback?: 'like' | 'dislike' | null;
+  isFeedbackResponse?: boolean;
+}
+
+interface BotConfig {
+  displayName: string;
+  initialMessages: string[];
+  suggestedMessages: string[];
+  messagePlaceholder: string;
+  dismissableNotice: string;
+  footer: string;
 }
 
 class ChatStore {
   messages: Message[] = [];
-  isOpen: boolean = false;
+  isOpen = false;
   conversationId: string | null = null;
-  isTyping: boolean = false;
+  isTyping = false;
   chunkTimeout: NodeJS.Timeout | null = null;
+  config: BotConfig | null = null;
+  configLoaded = false;
 
   constructor() {
     makeAutoObservable(this);
+    this.loadConfig();
+  }
+
+  async loadConfig() {
+    try {
+      const response = await fetch("http://localhost:8080/api/config");
+      if (response.ok) {
+        this.config = await response.json();
+      }
+    } catch (err) {
+      console.error("Failed to load config:", err);
+    }
+    this.configLoaded = true;
   }
 
   toggleChat = () => {
     this.isOpen = !this.isOpen;
-  }
+  };
 
-  addMessage = (text: string, isBot: boolean, id?: string) => {
-    this.messages.push({ text, isBot, id });
-  }
+  addMessage = (text: string, isBot: boolean, id?: string, isFeedbackResponse?: boolean) => {
+    this.messages.push({ text, isBot, id, isFeedbackResponse });
+  };
 
   updateLastBotMessage = (text: string) => {
-    const lastBotMessage = [...this.messages].reverse().find(m => m.isBot);
-    if (lastBotMessage) {
-      lastBotMessage.text = text;
+    const last = [...this.messages].reverse().find(m => m.isBot);
+    if (last) last.text = text;
+  };
+
+  setIsTyping = (v: boolean) => {
+    this.isTyping = v;
+  };
+
+  setMessageFeedback = (messageId: string, feedback: 'like' | 'dislike' | null) => {
+    const message = this.messages.find(m => m.id === messageId);
+    if (message) {
+      message.feedback = feedback;
+    }
+  };
+
+  async sendFeedback(messageId: string, feedback: 'like' | 'dislike') {
+    try {
+      await fetch("http://localhost:8080/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversationId: this.conversationId,
+          messageId,
+          feedback,
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to send feedback:", err);
     }
   }
 
-
-
-  setIsTyping = (isTyping: boolean) => {
-    // This can be used to show typing indicators
-    this.isTyping = isTyping;
-  }
-
-  async sendMessage(message: string) {
-    this.addMessage(message, false);
+  async handleLike(messageId: string) {
+    this.setMessageFeedback(messageId, 'like');
+    await this.sendFeedback(messageId, 'like');
     
-    try {
-      if (!message || !message.trim()) {
-        throw new Error('Please enter a message');
-      }
+    // Fetch a fresh response from Chatbase for the like feedback
+    this.setIsTyping(true);
+    const feedbackMessageId = uuidv4();
+    this.addMessage("", true, feedbackMessageId, true); // Mark as feedback response
 
-      // Create a placeholder message for streaming
-      const messageId = Date.now().toString();
-      this.addMessage('', true, messageId); // Start with empty message
-      this.setIsTyping(true);
-      
-      console.log('Sending request:', {
-        message,
-        conversationId: this.conversationId,
-      });
-      
-      const response = await fetch('http://localhost:8080/api/chat', {
-      //const response = await fetch('https://chatbot-vsqs.onrender.com/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          message,
+    try {
+      const response = await fetch("http://localhost:8080/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "[USER FEEDBACK: Like] - The user found the response helpful.",
           conversationId: this.conversationId,
-          metadata: {
-            name: 'Clark',
-            email: 'cruzc@borgs.com.au'
-          }
+          isFeedback: true,
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to get response from server');
+        this.updateLastBotMessage("Thank you for your feedback!");
+        this.setIsTyping(false);
+        return;
       }
 
-      // Handle streaming response
       const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let accumulatedResponse = '';
-      let buffer = '';
-      let hasStarted = false;
-      let displayedText = '';
+      if (!reader) return;
 
-      const animateText = (newText: string) => {
-        const words = newText.split(' ');
-        const displayedWords = displayedText.split(' ');
-        
-        // Only animate new words
-        if (words.length > displayedWords.length) {
-          let wordIndex = displayedWords.length;
-          
-          const showNextWord = () => {
-            if (wordIndex < words.length) {
-              displayedText = words.slice(0, wordIndex + 1).join(' ');
-              this.updateLastBotMessage(displayedText);
-              wordIndex++;
-              
-              // Shorter delay for faster typing rhythm
-              setTimeout(showNextWord, 30 + Math.random() * 20); // 30-50ms delay
-            }
-          };
-          
-          showNextWord();
-        } else {
-          // If no new words, just update immediately
-          displayedText = newText;
-          this.updateLastBotMessage(displayedText);
-        }
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let accumulated = "";
+      let displayedText = "";
+
+      const animateText = (text: string) => {
+        const words = text.split(" ");
+        let index = displayedText.split(" ").length;
+
+        const tick = () => {
+          if (index < words.length) {
+            displayedText = words.slice(0, index + 1).join(" ");
+            this.updateLastBotMessage(displayedText);
+            index++;
+            setTimeout(tick, 30 + Math.random() * 20);
+          }
+        };
+
+        tick();
       };
 
-      if (reader) {
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            
-            // Keep the last potentially incomplete line in the buffer
-            buffer = lines.pop() || '';
+        buffer += decoder.decode(value, { stream: true });
 
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                try {
-                  const jsonData = line.slice(6).trim();
-                  if (jsonData) {
-                    const data = JSON.parse(jsonData);
-                    console.log('Received SSE event:', data);
-                    
-                    switch (data.type) {
-                      case 'start':
-                        this.conversationId = data.conversationId;
-                        hasStarted = true; // Start immediately
-                        accumulatedResponse = '';
-                        console.log('Started streaming');
-                        break;
-                        
-                      case 'chunk':
-                        if (hasStarted) {
-                          accumulatedResponse += data.content;
-                          
-                          // Batch chunks for smoother animation with reduced delay
-                          if (this.chunkTimeout) clearTimeout(this.chunkTimeout);
-                          this.chunkTimeout = setTimeout(() => {
-                            animateText(accumulatedResponse);
-                          }, 20); // Reduced delay for smoother batching
-                        }
-                        break;
-                        
-                      case 'sources':
-                        console.log('Received sources:', data.sources);
-                        break;
-                        
-                      case 'end':
-                        console.log('Streaming complete');
-                        // Ensure final text is displayed
-                        if (accumulatedResponse) {
-                          displayedText = accumulatedResponse;
-                          this.updateLastBotMessage(accumulatedResponse);
-                        }
-                        break;
-                        
-                      case 'error':
-                        throw new Error(data.error);
-                    }
-                  }
-                } catch (parseError) {
-                  console.error('Error parsing SSE data:', parseError, 'Line:', line);
-                }
-              }
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || "";
+
+        for (const evt of events) {
+          const lines = evt.split("\n");
+
+          for (const line of lines) {
+            if (!line.startsWith("data:")) continue;
+
+            const payload = line.replace("data:", "").trim();
+            if (!payload) continue;
+
+            let data;
+
+            try {
+              data = JSON.parse(payload);
+            } catch {
+              continue;
+            }
+
+            switch (data.type) {
+              case "chunk":
+                accumulated += data.content;
+
+                if (this.chunkTimeout) clearTimeout(this.chunkTimeout);
+                this.chunkTimeout = setTimeout(() => {
+                  animateText(accumulated);
+                }, 20);
+                break;
+
+              case "end":
+                this.updateLastBotMessage(accumulated);
+                break;
+
+              case "error":
+                this.updateLastBotMessage("Thank you for your feedback!");
+                break;
             }
           }
-        } finally {
-          this.setIsTyping(false);
-          if (this.chunkTimeout) clearTimeout(this.chunkTimeout);
         }
       }
-    } catch (error) {
-      console.error('Error sending message:', error);
-      this.setIsTyping(false);
-      this.updateLastBotMessage('Sorry, there was an error processing your message.');
+    } catch (err) {
+      console.error(err);
+      this.updateLastBotMessage("Thank you for your feedback!");
     }
+
+    this.setIsTyping(false);
+  }
+
+  async handleDislike(messageId: string) {
+    this.setMessageFeedback(messageId, 'dislike');
+    await this.sendFeedback(messageId, 'dislike');
+    // Trigger regeneration after dislike
+    const message = this.messages.find(m => m.id === messageId);
+    if (message) {
+      // Find the previous user message
+      const messageIndex = this.messages.indexOf(message);
+      if (messageIndex > 0) {
+        const previousMessage = this.messages[messageIndex - 1];
+        if (!previousMessage.isBot) {
+          // Resend the previous user message
+          this.messages.splice(messageIndex, 1); // Remove the disliked message
+          this.setIsTyping(true);
+          await this.fetchNewResponse(previousMessage.text);
+        }
+      }
+    }
+  }
+
+  private async fetchNewResponse(userMessage: string) {
+    try {
+      const messageId = uuidv4();
+      this.addMessage("", true, messageId);
+
+      const response = await fetch("http://localhost:8080/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: userMessage,
+          conversationId: this.conversationId,
+          regenerate: true,
+        }),
+      });
+
+      if (!response.ok) {
+        this.updateLastBotMessage("Server error.");
+        this.setIsTyping(false);
+        return;
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) return;
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let accumulated = "";
+      let displayedText = "";
+      let started = false;
+
+      const animateText = (text: string) => {
+        const words = text.split(" ");
+        let index = displayedText.split(" ").length;
+
+        const tick = () => {
+          if (index < words.length) {
+            displayedText = words.slice(0, index + 1).join(" ");
+            this.updateLastBotMessage(displayedText);
+            index++;
+            setTimeout(tick, 30 + Math.random() * 20);
+          }
+        };
+
+        tick();
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || "";
+
+        for (const evt of events) {
+          const lines = evt.split("\n");
+
+          for (const line of lines) {
+            if (!line.startsWith("data:")) continue;
+
+            const payload = line.replace("data:", "").trim();
+            if (!payload) continue;
+
+            let data;
+
+            try {
+              data = JSON.parse(payload);
+            } catch {
+              continue;
+            }
+
+            switch (data.type) {
+              case "chunk":
+                accumulated += data.content;
+
+                if (this.chunkTimeout) clearTimeout(this.chunkTimeout);
+                this.chunkTimeout = setTimeout(() => {
+                  animateText(accumulated);
+                }, 20);
+                break;
+
+              case "end":
+                this.updateLastBotMessage(accumulated);
+                break;
+
+              case "error":
+                this.updateLastBotMessage("Sorry, an error occurred.");
+                break;
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      this.updateLastBotMessage("Network error.");
+    }
+
+    this.setIsTyping(false);
+  }
+
+  async sendMessage(message: string) {
+    this.addMessage(message, false);
+
+    if (!message.trim()) return;
+
+  if (!this.conversationId) {
+    this.conversationId = uuidv4();
+  }
+
+  // Placeholder bot message
+  const messageId = uuidv4();
+  this.addMessage("", true, messageId);
+    this.setIsTyping(true);
+
+    try {
+      const response = await fetch("http://localhost:8080/api/chat", {
+      // const response = await fetch("YOUR_DEPLOYED_URL/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message,
+          conversationId: this.conversationId
+        }),
+      });
+
+      if (!response.ok) {
+        this.updateLastBotMessage("Server error.");
+        this.setIsTyping(false);
+        return;
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) return;
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let accumulated = "";
+      let displayedText = "";
+      let started = false;
+
+      const animateText = (text: string) => {
+        const words = text.split(" ");
+        let index = displayedText.split(" ").length;
+
+        const tick = () => {
+          if (index < words.length) {
+            displayedText = words.slice(0, index + 1).join(" ");
+            this.updateLastBotMessage(displayedText);
+            index++;
+            setTimeout(tick, 30 + Math.random() * 20);
+          }
+        };
+
+        tick();
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || "";
+
+        for (const evt of events) {
+          const lines = evt.split("\n");
+
+          for (const line of lines) {
+            if (!line.startsWith("data:")) continue;
+
+            const payload = line.replace("data:", "").trim();
+            if (!payload) continue;
+
+            let data;
+
+            // Safely parse JSON
+            try {
+              data = JSON.parse(payload);
+            } catch {
+              continue;
+            }
+
+            switch (data.type) {
+              case "start":
+                this.conversationId = data.conversationId;
+                started = true;
+                break;
+
+              case "chunk":
+                if (!started) continue;
+
+                // content is already safe string from backend
+                accumulated += data.content;
+
+                if (this.chunkTimeout) clearTimeout(this.chunkTimeout);
+                this.chunkTimeout = setTimeout(() => {
+                  animateText(accumulated);
+                }, 20);
+                break;
+
+              case "end":
+                this.updateLastBotMessage(accumulated);
+                break;
+
+              case "error":
+                this.updateLastBotMessage("Sorry, an error occurred.");
+                break;
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      this.updateLastBotMessage("Network error.");
+    }
+
+    this.setIsTyping(false);
   }
 }
 
