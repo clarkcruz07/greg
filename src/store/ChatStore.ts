@@ -1,6 +1,7 @@
 import { makeAutoObservable } from 'mobx';
 import { v4 as uuidv4 } from "uuid";
-
+const URL = 'https://chatbot-vsqs.onrender.com';
+//const URL = 'http://localhost:8080';
 interface Message {
   text: string;
   isBot: boolean;
@@ -31,10 +32,9 @@ class ChatStore {
     makeAutoObservable(this);
     this.loadConfig();
   }
-
   async loadConfig() {
     try {
-      const response = await fetch("http://localhost:8080/api/config");
+      const response = await fetch(`${URL}/api/config`);
       if (response.ok) {
         this.config = await response.json();
       }
@@ -70,7 +70,7 @@ class ChatStore {
 
   async sendFeedback(messageId: string, feedback: 'like' | 'dislike') {
     try {
-      await fetch("http://localhost:8080/api/feedback", {
+      await fetch(`${URL}/api/feedback`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -94,7 +94,7 @@ class ChatStore {
     this.addMessage("", true, feedbackMessageId, true); // Mark as feedback response
 
     try {
-      const response = await fetch("http://localhost:8080/api/chat", {
+      const response = await fetch(`${URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -214,7 +214,7 @@ class ChatStore {
       const messageId = uuidv4();
       this.addMessage("", true, messageId);
 
-      const response = await fetch("http://localhost:8080/api/chat", {
+      const response = await fetch(`${URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -325,7 +325,7 @@ class ChatStore {
     this.setIsTyping(true);
 
     try {
-      const response = await fetch("http://localhost:8080/api/chat", {
+      const response = await fetch(`${URL}/api/chat`, {
       // const response = await fetch("YOUR_DEPLOYED_URL/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
