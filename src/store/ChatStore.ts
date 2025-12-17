@@ -1,7 +1,7 @@
 import { makeAutoObservable } from 'mobx';
 import { v4 as uuidv4 } from "uuid";
-//const URL = 'https://chatbot-vsqs.onrender.com';
-const URL = 'http://localhost:8080';
+const URL = 'https://chatbot-vsqs.onrender.com';
+//const URL = 'http://localhost:8080';
 interface Message {
   text: string;
   isBot: boolean;
