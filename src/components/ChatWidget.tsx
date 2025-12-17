@@ -167,9 +167,9 @@ interface MessageProps {
 
 const Message = styled.div<MessageProps>`
   max-width: ${props => props.$isBot ? '100%' : '50%'};
-  padding: 1rem 1.2rem;
+  
   border-radius: 10px;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.6;
   align-self: ${props => props.$isBot ? 'flex-start' : 'flex-end'};
   color: ${props => props.$isBot ? '#333' : '#c22445'};
@@ -178,7 +178,10 @@ const Message = styled.div<MessageProps>`
   width: ${props => props.$isBot ? '' : '50%'};
   text-align: left;
   position: relative;
-
+  
+  div:first-child {
+  padding: 0.8rem;
+  }
   p {
     margin: 0.6rem 0;
     &:first-child {
@@ -215,11 +218,16 @@ h4, h5, h6 {
 ol li::before,
 ul li::before {
   font-weight: 400;
+  
 }
+
+
   ul, ol {
   margin: 1.5rem 0 0.8rem 0;
-  padding-left: 0;
-  list-style: none;
+  padding-left: 0.75rem;
+  a {
+    color: #000;
+  }
 }
 
 ol {
@@ -235,18 +243,22 @@ ol {
     position: relative;
   }
 
+
   ol li::before {
     content: counter(item) ". ";
     counter-increment: item;
     position: absolute;
     left: 0;
-    
   }
 
+  ul {
+  list-style: disc;
+  }
   ul li::before {
     content: "•";
     position: absolute;
     left: 0;
+    color: #000;
   }
 
   strong {
@@ -316,13 +328,34 @@ const DisclaimerNotice = styled.div`
   color: #666;
   line-height: 1.4;
   border-radius: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0 10px;
   p {
     margin: 0;
+    padding: 5px 0px;
   }
 
   a {
     color: #c22445;
     text-decoration: underline;
+  }
+`;
+
+const DisclaimerCloseButton = styled.button`
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #666;
+  font-size: 1.2rem;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+
+  &:hover {
+    color: #c22445;
   }
 `;
 
@@ -432,8 +465,14 @@ interface QuickPrompt {
   action: () => void;
 }
 
+interface InitialMessage {
+  text: string;
+  action: () => void;
+}
+
 export const ChatWidget = observer(() => {
   const [input, setInput] = useState('');
+  const [showDisclaimer, setShowDisclaimer] = useState(true);
 
   // Create dynamic quick prompts from config
   const getQuickPrompts = (): QuickPrompt[] => {
@@ -441,6 +480,15 @@ export const ChatWidget = observer(() => {
       return [];
     }
     return chatStore.config.suggestedMessages.map((text) => ({
+      text,
+      action: () => chatStore.sendMessage(text)
+    }));
+  };
+    const getInitialMessage = (): QuickPrompt[] => {
+    if (!chatStore.config?.initialMessages) {
+      return [];
+    }
+    return chatStore.config.initialMessages.map((text) => ({
       text,
       action: () => chatStore.sendMessage(text)
     }));
@@ -483,10 +531,13 @@ const normalizeMarkdown = (text: string) => {
             <MessagesContainer>
               <IntroSection>
                 <img className="greg-icon" src="/greg.png" alt={chatStore.config?.displayName || "Greg"} />
-                <HeaderTitle>Hi, I'm {chatStore.config?.displayName || "Greg"} — your product assistant at Porta.</HeaderTitle>
-                <HeaderSubtitle>
-                  Ask me anything about timber products, specs, installation, or finding the right solution for your build.
-                </HeaderSubtitle>
+                {getInitialMessage().length > 0 && (
+                  <>
+                    <HeaderTitle>{getInitialMessage()[0].text}</HeaderTitle>
+                    <HeaderSubtitle>{getInitialMessage()[1].text}</HeaderSubtitle>
+                  </>
+                )}
+              
                 <PromptLabel>You Could Try These Quick Prompts</PromptLabel>
                 <QuickPrompts>
                   {getQuickPrompts().map((prompt, index) => (
@@ -543,12 +594,17 @@ const normalizeMarkdown = (text: string) => {
           )}
 
           <InputForm onSubmit={handleSubmit}>
-            {chatStore.config?.dismissableNotice && (
-              <DisclaimerNotice
-                dangerouslySetInnerHTML={{
-                  __html: chatStore.config.dismissableNotice
-                }}
-              />
+            {chatStore.config?.dismissableNotice && showDisclaimer && (
+              <DisclaimerNotice>
+                <div
+                  dangerouslySetInnerHTML={{
+                    __html: chatStore.config.dismissableNotice
+                  }}
+                />
+                <DisclaimerCloseButton onClick={() => setShowDisclaimer(false)}>
+                  ×
+                </DisclaimerCloseButton>
+              </DisclaimerNotice>
             )}
             <ChatInputBar>
               <Input
