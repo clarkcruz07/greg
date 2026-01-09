@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import styled from 'styled-components';
 import { marked } from "marked";
 import { chatStore } from '../store/ChatStore';
+import { useConversation } from '@elevenlabs/react';
 
 marked.setOptions({ async: false });
 
@@ -415,7 +416,7 @@ const Footer = styled.div`
   }
 `;
 
-const IconButton = styled.button`
+const IconButton = styled.button<{ $variant?: 'destructive' }>`
   background: none;
   border: none;
   cursor: pointer;
@@ -474,6 +475,40 @@ export const ChatWidget = observer(() => {
   const [input, setInput] = useState('');
   const [showDisclaimer, setShowDisclaimer] = useState(true);
 
+  //voice call
+  const [hasPermission, setHasPermission] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const conversation = useConversation();
+const {status, isSpeaking} = conversation;
+const startConversation = async () => {
+const conversationID = await conversation.startSession({
+  agentId: 'agent_5701keer085aegja27hf56tbfmqk',
+  connectionType: 'websocket',
+});
+console.log('Conversation has started with ID:', conversationID);
+}
+
+const endConversation = async () => {
+  await conversation.endSession();
+  console.log('Conversation has ended');
+}
+
+const muteConversation = async () => {
+
+}
+
+useEffect(() => {
+  const askMicPermission = async () => {
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      setHasPermission(true);
+    } catch (error) {
+      console.error('Error asking for mic permission:', error);
+      setErrorMessage((error as Error).message);
+    }
+  };
+  askMicPermission();
+},[])
   // Create dynamic quick prompts from config
   const getQuickPrompts = (): QuickPrompt[] => {
     if (!chatStore.config?.suggestedMessages) {
@@ -614,9 +649,18 @@ const normalizeMarkdown = (text: string) => {
               />
               <ChatInputActions>
                 <RightIcons>
-                  <IconButton type="button">
+                  { status === "connected" ? (
+                     <IconButton type="button" onClick={endConversation}>
+                     On Call
+                   </IconButton>
+                  ) : (
+                    <IconButton type="button" onClick={startConversation}>
                     <img src="/mic.png" alt="Voice input" />
                   </IconButton>
+                  ) }
+                 
+                 
+                  
                   <IconButton type="submit">
                     <img src="/send.png" alt="Send message" />
                   </IconButton>
