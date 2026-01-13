@@ -482,7 +482,7 @@ export const ChatWidget = observer(() => {
 const {status, isSpeaking} = conversation;
 const startConversation = async () => {
 const conversationID = await conversation.startSession({
-  agentId: 'agent_5701keer085aegja27hf56tbfmqk',
+  agentId: 'agent_8401ketdg3dpfzb8caa76jg613hr',
   connectionType: 'websocket',
 });
 console.log('Conversation has started with ID:', conversationID);
